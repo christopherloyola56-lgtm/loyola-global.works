@@ -942,7 +942,11 @@ function renderAdminLogin(){
   btn.addEventListener("click", tryLogin);
   input.addEventListener("keydown", function(e){ if(e.key === "Enter") tryLogin(); });
   card.appendChild(input); card.appendChild(btn); card.appendChild(err);
-  card.appendChild(el("p", {class:"tiny-note"}, ["Default passcode: lgw-admin-2026 — change it under Settings once you're in. This gate runs in your browser only; treat this link as semi-private and rotate the passcode for sensitive use."]));
+  card.appendChild(el("p", {class:"tiny-note"}, ["NOTICE: RESTRICTED ACCESS
+
+This administrative area is restricted to authorized personnel only. Unauthorized access, attempt to access, or misuse of this system is strictly prohibited and monitored.
+
+Please log in with your assigned credentials to proceed."]));
   card.appendChild(el("a", {href:"#/", class:"tiny-note", style:"display:block;margin-top:14px;"}, ["← Back to site"]));
   shell.appendChild(card);
   return shell;
