@@ -1743,5 +1743,19 @@ loadAll().then(function(){
 })();
 
 </script>
+
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+ const hero=document.querySelector('.hero');
+ if(hero){
+   hero.style.backgroundAttachment='scroll';
+   window.addEventListener('scroll',()=>{
+      const y=window.pageYOffset;
+      hero.style.backgroundPosition=`center ${-y*0.35}px`;
+   },{passive:true});
+ }
+});
+</script>
+
 </body>
 </html>
