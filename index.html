@@ -1757,5 +1757,33 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 </script>
 
+
+<input type="file" id="heroLogoUpload" accept="image/*" style="display:none">
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+ const hero=document.querySelector('.hero img, .hero-logo img');
+ const nav=document.querySelector('.nav-logo img');
+ if(!hero) return;
+ let btn=document.createElement('button');
+ btn.textContent='Change Logo';
+ btn.style.cssText='position:absolute;top:20px;right:20px;z-index:9999;padding:10px;';
+ let heroSec=document.querySelector('.hero');
+ heroSec.style.position='relative';
+ heroSec.appendChild(btn);
+ const input=document.getElementById('heroLogoUpload');
+ btn.onclick=()=>input.click();
+ input.onchange=e=>{
+   const f=e.target.files[0];
+   if(!f) return;
+   const r=new FileReader();
+   r.onload=x=>{
+      hero.src=x.target.result;
+      if(nav) nav.src=x.target.result;
+   };
+   r.readAsDataURL(f);
+ };
+});
+</script>
+
 </body>
 </html>
