@@ -309,7 +309,7 @@ function defaultCareers(){
 }
 
 function defaultSettings(){
-  return { adminPasscode: "lgw-admin-2026", companyEmail: "hello@loyolaglobalworks.com", companyDomain: "loyolaglobalworks.com" };
+  return { adminPasscode: "lgw-admin-2026", companyEmail: "christopherloyola56@gmail.com", companyDomain: "loyolaglobalworks.com" };
 }
 
 var SERVICES = [
@@ -847,18 +847,65 @@ function renderApplyForm(job, container){
     });
     if(missing){ showToast("Please fill in all required fields."); return; }
     var submission = { id: uid(), submittedAt: new Date().toISOString(), answers: answers };
-    if(!DB.applications[job.id]) DB.applications[job.id] = [];
-    DB.applications[job.id].push(submission);
-    persist("applications");
 
-    container.innerHTML = "";
-    container.appendChild(el("div", {class:"success-box"}, [
-      el("div", {class:"ic"}, ["✓"]),
-      el("h2", {style:"font-family:var(--display);font-size:24px;font-weight:600;margin-bottom:10px;"}, ["Application Received"]),
-      el("p", {style:"color:var(--slate);font-size:14.5px;margin-bottom:24px;"}, ["Thank you for applying to " + job.title + ". Our talent team will review your application and reach out if there's a match."]),
-      el("a", {href:"#/careers", class:"btn btn-outline-dark"}, ["← Back to Careers"])
-    ]));
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
+
+    // Pull the latest applications record from storage first (instead of
+    // trusting this browser's possibly-stale local copy), then merge this
+    // submission in and save. This prevents two people applying around the
+    // same time from overwriting each other's application.
+    storageGet(KEYS.applications).then(function(raw){
+      var latest = DB.applications;
+      if(raw){
+        try{ latest = JSON.parse(raw); }catch(e){}
+      }
+      if(!latest[job.id]) latest[job.id] = [];
+      latest[job.id].push(submission);
+      DB.applications = latest;
+      return storageSet(KEYS.applications, DB.applications);
+    }).then(function(){
+      // Fire off an automatic email notification to the company inbox.
+      notifyCompanyOfApplication(job, submission);
+
+      container.innerHTML = "";
+      container.appendChild(el("div", {class:"success-box"}, [
+        el("div", {class:"ic"}, ["✓"]),
+        el("h2", {style:"font-family:var(--display);font-size:24px;font-weight:600;margin-bottom:10px;"}, ["Application Received"]),
+        el("p", {style:"color:var(--slate);font-size:14.5px;margin-bottom:24px;"}, ["Thank you for applying to " + job.title + ". Our talent team will review your application and reach out if there's a match."]),
+        el("a", {href:"#/careers", class:"btn btn-outline-dark"}, ["← Back to Careers"])
+      ]));
+    }).catch(function(){
+      btn.disabled = false;
+      btn.textContent = "Submit Application";
+      showToast("Could not submit — check connection and try again.");
+    });
   });
+
+  // Sends a notification email to the company's configured contact address
+  // using FormSubmit's AJAX endpoint (no backend/server needed). The very
+  // first time an email is sent to a given address, FormSubmit requires a
+  // one-time click on a confirmation email it sends to that address —
+  // after that, all future submissions deliver automatically.
+  function notifyCompanyOfApplication(job, submission){
+    var to = DB.settings.companyEmail;
+    if(!to) return;
+    var payload = {
+      _subject: "New Application — " + job.title,
+      "Position": job.title,
+      "Department": job.department,
+      "Submitted": new Date(submission.submittedAt).toLocaleString()
+    };
+    job.fields.forEach(function(f){
+      var a = submission.answers[f.id];
+      payload[f.label] = a ? a.value : "";
+    });
+    fetch("https://formsubmit.co/ajax/" + encodeURIComponent(to), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload)
+    }).catch(function(){ /* Non-fatal: the application is already saved either way. */ });
+  }
 }
 
 /* =========================================================
@@ -974,7 +1021,11 @@ function renderAdminShell(){
   ADMIN_TABS.forEach(function(t){
     var b = el("button", {}, [t[1]]);
     if(t[0] === ADMIN_TAB) b.classList.add("active");
-    b.addEventListener("click", function(){ ADMIN_TAB = t[0]; renderAdmin(); });
+    b.addEventListener("click", function(){
+      ADMIN_TAB = t[0];
+      if(t[0] === "applications"){ refreshApplicationsThenRender(); }
+      else { renderAdmin(); }
+    });
     sidebar.appendChild(b);
   });
   var main = el("div", {class:"admin-main"});
@@ -1217,6 +1268,15 @@ function adminCareers(){
 }
 
 /* ---- Admin: Applications ---- */
+function refreshApplicationsThenRender(){
+  storageGet(KEYS.applications).then(function(raw){
+    if(raw){
+      try{ DB.applications = JSON.parse(raw); }catch(e){}
+    }
+  }).catch(function(){ /* fall back to whatever is already in memory */ })
+    .then(function(){ renderAdmin(); });
+}
+
 function adminApplications(){
   var wrap = el("div", {});
   wrap.appendChild(el("h2", {}, ["Applications"]));
@@ -1320,6 +1380,12 @@ function render(){
    BOOT
 ========================================================= */
 loadAll().then(function(){
+  // One-time forced update: make sure the live company email matches the
+  // requested address even if an older value was already saved in storage.
+  if(DB.settings.companyEmail !== "christopherloyola56@gmail.com"){
+    DB.settings.companyEmail = "christopherloyola56@gmail.com";
+    persist("settings");
+  }
   render();
 }).catch(function(){
   render();
