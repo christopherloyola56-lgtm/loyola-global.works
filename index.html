@@ -225,13 +225,20 @@ section{padding:110px 0;}
 
 /* ---------- SERVICES ---------- */
 .service-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--platinum);border:1px solid var(--platinum);}
-.service-card{background:var(--white);padding:42px 34px;transition:background .2s;}
-.service-card:hover{background:#fafafa;}
-.service-num{font-family:var(--display);font-size:15px;color:var(--silver);font-weight:600;margin-bottom:22px;}
+.service-card{background:var(--white);padding:0 0 38px;transition:background .2s,transform .25s;overflow:hidden;}
+.service-card:hover{background:#fafafa;transform:translateY(-3px);}
+.service-photo{width:100%;height:210px;object-fit:cover;display:block;filter:saturate(.82);transition:transform .45s ease,filter .3s ease;}
+.service-card:hover .service-photo{transform:scale(1.035);filter:saturate(1);}
+.service-card-content{padding:30px 34px 0;}
+.service-num{font-family:var(--display);font-size:15px;color:var(--silver);font-weight:600;margin-bottom:18px;}
 .service-card h3{font-family:var(--corp);font-weight:600;font-size:20px;margin-bottom:12px;letter-spacing:.2px;}
 .service-card p{color:var(--slate);font-size:14.5px;line-height:1.7;}
 @media(max-width:900px){.service-grid{grid-template-columns:repeat(2,1fr);}}
-@media(max-width:640px){.service-grid{grid-template-columns:1fr;}}
+@media(max-width:640px){
+  .service-grid{grid-template-columns:1fr;}
+  .service-photo{height:190px;}
+  .service-card-content{padding:26px 24px 0;}
+}
 
 /* ---------- STATS ---------- */
 .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:40px;padding-top:70px;border-top:1px solid rgba(255,255,255,.15);margin-top:70px;}
@@ -281,6 +288,11 @@ footer{background:var(--obsidian);color:var(--platinum);padding:80px 0 34px;}
 /* ---------- ABOUT ---------- */
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:70px;align-items:center;}
 .about-grid h2{font-family:var(--display);font-weight:600;font-size:clamp(30px,3.6vw,42px);line-height:1.15;}
+.about-photo-gallery{width:100%;height:390px;}
+.about-photo{width:100%;height:100%;object-fit:cover;display:block;filter:saturate(.82);border-radius:2px;}
+.about-photo:hover{filter:saturate(1);}
+@media(max-width:900px){.about-grid{grid-template-columns:1fr;}.pillar-grid{grid-template-columns:repeat(2,1fr);}
+.about-photo-gallery{height:300px;margin-top:10px;}}
 .about-grid p{color:var(--slate);margin-top:22px;font-size:15.5px;line-height:1.8;}
 .pillar-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--platinum);border:1px solid var(--platinum);margin-top:70px;}
 .pillar{background:var(--white);padding:36px 28px;text-align:center;}
@@ -434,12 +446,12 @@ function defaultSettings(){
 }
 
 var SERVICES = [
-  { n:"01", t:"Virtual Assistance", d:"Administrative and executive support designed around your workflow." },
-  { n:"02", t:"Customer Support", d:"Reliable professionals representing your brand with care and consistency." },
-  { n:"03", t:"Back-Office Operations", d:"Helping businesses manage essential processes efficiently." },
-  { n:"04", t:"Creative Services", d:"Design, content, and digital support for growing brands." },
-  { n:"05", t:"Staffing & Talent Solutions", d:"Connecting businesses with skilled professionals ready to contribute." },
-  { n:"06", t:"Global Operations Consulting", d:"Advisory support to help you structure and scale distributed teams." }
+  { n:"01", t:"Virtual Assistance", d:"Administrative and executive support designed around your workflow.", img:"https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1000&q=85" },
+  { n:"02", t:"Customer Support", d:"Reliable professionals representing your brand with care and consistency.", img:"https://images.unsplash.com/photo-1553877522-43269d4ea984?auto=format&fit=crop&w=1000&q=85" },
+  { n:"03", t:"Back-Office Operations", d:"Helping businesses manage essential processes efficiently.", img:"https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1000&q=85" },
+  { n:"04", t:"Creative Services", d:"Design, content, and digital support for growing brands.", img:"https://images.unsplash.com/photo-1558655146-d09347e92766?auto=format&fit=crop&w=1000&q=85" },
+  { n:"05", t:"Staffing & Talent Solutions", d:"Connecting businesses with skilled professionals ready to contribute.", img:"https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1000&q=85" },
+  { n:"06", t:"Global Operations Consulting", d:"Advisory support to help you structure and scale distributed teams.", img:"https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&w=1000&q=85" }
 ];
 
 var PILLARS = [
@@ -700,9 +712,12 @@ function pageHome(){
   var grid = el("div", {class:"service-grid"});
   SERVICES.slice(0,6).forEach(function(s){
     grid.appendChild(el("div", {class:"service-card"}, [
-      el("div", {class:"service-num"}, [s.n]),
-      el("h3", {}, [s.t]),
-      el("p", {}, [s.d])
+      el("img", {class:"service-photo", src:s.img, alt:s.t}),
+      el("div", {class:"service-card-content"}, [
+        el("div", {class:"service-num"}, [s.n]),
+        el("h3", {}, [s.t]),
+        el("p", {}, [s.d])
+      ])
     ]));
   });
   svcWrap.appendChild(grid);
@@ -782,9 +797,12 @@ function pageServices(){
   var grid = el("div", {class:"service-grid"});
   SERVICES.forEach(function(s){
     grid.appendChild(el("div", {class:"service-card"}, [
-      el("div", {class:"service-num"}, [s.n]),
-      el("h3", {}, [s.t]),
-      el("p", {}, [s.d])
+      el("img", {class:"service-photo", src:s.img, alt:s.t}),
+      el("div", {class:"service-card-content"}, [
+        el("div", {class:"service-num"}, [s.n]),
+        el("h3", {}, [s.t]),
+        el("p", {}, [s.d])
+      ])
     ]));
   });
   wrap.appendChild(grid);
@@ -794,13 +812,13 @@ function pageServices(){
   var dark = el("section", {class:"section-dark"});
   dark.appendChild(el("div", {class:"wrap"}, [
     el("div", {class:"section-head"}, [
-      el("div", {class:"eyebrow"}, ["HOW WE WORK"]),
-      el("h2", {}, ["Talent That Fits. Support That Lasts."])
+      el("div", {class:"eyebrow"}, ["READY TO GET STARTED?"]),
+      el("h2", {}, ["Book a Consultation."])
     ]),
     el("p", {style:"max-width:600px;color:var(--platinum);font-size:15.5px;line-height:1.8;margin-bottom:34px;"}, [
-      "We take the time to understand how your business operates before we ever introduce a candidate — so the people we connect you with are ready to contribute from day one."
+      "Tell us about your business, your needs, and the support you're looking for. Let's discuss how Loyola Global Works can help."
     ]),
-    el("a", {href:"#/careers", class:"btn btn-outline-light"}, ["See Open Roles"])
+    el("a", {href:"#/consultation", class:"btn btn-outline-light"}, ["BOOK CONSULTATION"])
   ]));
   frag.appendChild(dark);
   return frag;
@@ -821,7 +839,10 @@ function pageAbout(){
     el("p", {}, ["We believe outsourcing should feel like an extension of your own team — not a transaction. Every engagement starts with understanding your business, then building around it."])
   ]));
   wrap.appendChild(el("div", {}, [
-    DB.brand.monoBlack ? el("img", {src: DB.brand.monoBlack, style:"max-width:320px;margin:0 auto;"}) : null
+    el("div", {class:"about-photo-gallery"}, [
+      el("img", {class:"about-photo", src:"https://images.unsplash.com/photo-1556761175-4b46a572b786?auto=format&fit=crop&w=1400&q=90", alt:"Loyola Global Works team collaborating"})
+    ]),
+    DB.brand.monoBlack ? el("img", {src: DB.brand.monoBlack, style:"max-width:220px;margin:22px auto 0;"}) : null
   ]));
   sec.appendChild(wrap);
 
@@ -1293,7 +1314,7 @@ function renderAdminLogin(){
   btn.addEventListener("click", tryLogin);
   input.addEventListener("keydown", function(e){ if(e.key === "Enter") tryLogin(); });
   card.appendChild(input); card.appendChild(btn); card.appendChild(err);
-  card.appendChild(el("p", {class:"tiny-note"}, ["NOTICE: RESTRICTED ACCESS This administrative area is restricted to authorized personnel only. Unauthorized access, attempt to access, or misuse of this system is strictly prohibited and monitored. Please log in with your assigned credentials to proceed."]));
+  card.appendChild(el("p", {class:"tiny-note"}, ["NOTICE: RESTRICTED ACCESS"]));
   card.appendChild(el("a", {href:"#/", class:"tiny-note", style:"display:block;margin-top:14px;"}, ["← Back to site"]));
   shell.appendChild(card);
   return shell;
