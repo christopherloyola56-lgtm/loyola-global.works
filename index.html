@@ -1037,6 +1037,7 @@ function renderApplyForm(job, container){
     }).then(function(){
       // Fire off an automatic email notification to the company inbox.
       notifyCompanyOfApplication(job, submission);
+      // Send the branded receipt to the applicant via FormSubmit autoresponse.
       try { notifyApplicantOfApplication(job, submission); } catch(e) { console.error('Applicant receipt error:', e); }
 
       container.innerHTML = "";
@@ -1097,7 +1098,14 @@ function sendFormSubmitReceipt(email, subject, message, fields){
 
   var form = document.createElement("form");
   form.method = "POST";
-  form.action = "https://formsubmit.co/" + encodeURIComponent(email);
+  // IMPORTANT: submit to Loyola Global Works' activated FormSubmit endpoint.
+  // The applicant/lead's address stays in the `email` field, which is what
+  // FormSubmit uses for `_autoresponse`.
+  var receiptDestination =
+    (typeof DB !== "undefined" && DB.settings && DB.settings.companyEmail)
+      ? DB.settings.companyEmail
+      : "christopherloyola56@gmail.com";
+  form.action = "https://formsubmit.co/" + encodeURIComponent(receiptDestination);
   form.target = frameName;
   form.style.display = "none";
 
@@ -1425,6 +1433,7 @@ function renderConsultationForm(container){
       // Fire off an automatic email notification to the company inbox so
       // this lead can be followed up on and offers/services can be sent.
       notifyCompanyOfLead(lead);
+      // Send the branded receipt to the consultation lead via FormSubmit autoresponse.
       try { notifyLeadOfReceipt(lead); } catch(e) { console.error('Lead receipt error:', e); }
 
       container.innerHTML = "";
