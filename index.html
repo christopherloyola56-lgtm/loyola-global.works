@@ -1159,6 +1159,92 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
   });
 }
 
+// Escapes user-submitted text before it's dropped into an HTML email body,
+// so an applicant/lead typing "<b>" or "&" into a form field can't break
+// the layout (or, worse, inject markup into the message sent on our behalf).
+function lgwEscapeHtml(str){
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Builds the branded confirmation email body sent back to applicants and
+// consultation leads. Mirrors the monochrome/obsidian look of the public
+// site (Georgia serif headline standing in for Cormorant Garamond, Arial
+// standing in for Montserrat — email clients don't load @font-face), using
+// a plain text wordmark instead of an embedded logo image since most inboxes
+// (Gmail, Outlook, Yahoo) strip data-URI / hotlinked images from received
+// mail by default. type is "application" or "consultation"; data holds the
+// fields specific to that flow.
+function lgwBrandedEmail(type, data){
+  data = data || {};
+  var isApplication = type === "application";
+
+  var domainRaw = (typeof DB !== "undefined" && DB.settings && DB.settings.companyDomain) || "loyolaglobalworks.com";
+  var domain = domainRaw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+  var siteUrl = "https://www." + domain;
+  var contactEmail = "hello@" + domain;
+
+  var eyebrow = isApplication ? "APPLICATION RECEIVED" : "CONSULTATION REQUEST RECEIVED";
+  var headline = isApplication ? "Thank You for Your Application" : "Thank You for Reaching Out";
+  var firstName = lgwEscapeHtml(String(data.name || "there").trim().split(/\s+/)[0]);
+  var intro = isApplication
+    ? "We\u2019re pleased to confirm that your application has been successfully received by Loyola Global Works."
+    : "We\u2019re pleased to confirm that your consultation request has been successfully received by Loyola Global Works.";
+  var body2 = isApplication
+    ? "Our talent team will carefully review the information you provided. If your experience and qualifications align with the opportunity, a member of our team will contact you regarding the next steps."
+    : "A member of our team will review your request and reach out shortly to confirm a time and discuss how we can best support your business.";
+
+  var detailsLabel = isApplication ? "APPLICATION DETAILS" : "CONSULTATION DETAILS";
+  var rows = isApplication ? [
+    ["POSITION", data.position],
+    ["SUBMITTED", data.submitted]
+  ] : [
+    ["SERVICE", data.service],
+    ["PREFERRED DATE", data.date],
+    ["PREFERRED TIME", data.time]
+  ];
+
+  var rowsHtml = rows.map(function(r, i){
+    var last = i === rows.length - 1;
+    return '<div style="display:flex;justify-content:space-between;padding:10px 0;'
+      + (last ? "" : "border-bottom:1px solid #e7e7e7;")
+      + 'font:14px Arial,sans-serif;color:#111;"><span style="color:#777;">' + lgwEscapeHtml(r[0])
+      + '</span><b>' + lgwEscapeHtml(r[1] || "\u2014") + '</b></div>';
+  }).join("");
+
+  return ''
+    + '<div style="margin:0;background:#f4f4f2;padding:36px 14px;font-family:Arial,sans-serif;">'
+    +   '<div style="max-width:640px;margin:0 auto;background:#ffffff;">'
+    +     '<div style="background:#171717;padding:34px;text-align:center;">'
+    +       '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:16px;letter-spacing:4px;color:#ffffff;font-weight:700;">LOYOLA GLOBAL WORKS</div>'
+    +     '</div>'
+    +     '<div style="height:4px;background:#111111;"></div>'
+    +     '<div style="padding:46px 42px 12px;text-align:center;">'
+    +       '<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:3px;color:#777777;font-weight:600;">' + eyebrow + '</div>'
+    +       '<h1 style="font-family:Georgia,serif;font-size:36px;line-height:1.15;font-weight:400;color:#1c1c1c;margin:18px 0;">' + headline + '</h1>'
+    +       '<div style="width:52px;height:1px;background:#222222;margin:0 auto 28px;"></div>'
+    +       '<p style="font-family:Georgia,serif;font-size:18px;color:#444444;margin:0 0 18px;">Dear ' + firstName + ',</p>'
+    +       '<p style="font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#555555;margin:0 0 14px;">' + intro + '</p>'
+    +       '<p style="font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#555555;margin:0;">' + body2 + '</p>'
+    +     '</div>'
+    +     '<div style="margin:0 42px;padding:16px 0;border-top:1px solid #222222;border-bottom:1px solid #dddddd;">'
+    +       '<div style="font:700 11px Arial,sans-serif;letter-spacing:2px;color:#777777;margin-bottom:4px;">' + detailsLabel + '</div>'
+    +       rowsHtml
+    +     '</div>'
+    +     '<div style="text-align:center;padding:32px 42px 42px;"><a href="' + siteUrl + '" style="display:inline-block;background:#171717;color:#ffffff;text-decoration:none;font:700 12px Arial,sans-serif;letter-spacing:2px;padding:15px 26px;">VISIT LOYOLA GLOBAL WORKS</a></div>'
+    +     '<div style="background:#171717;padding:30px;text-align:center;color:#ffffff;font-family:Arial,sans-serif;">'
+    +       '<div style="font-size:13px;letter-spacing:3px;font-weight:600;">LOYOLA GLOBAL WORKS</div>'
+    +       '<div style="margin-top:9px;font-size:10px;letter-spacing:2px;color:#bdbdbd;">CONNECTING TALENT. POWERING BUSINESS.</div>'
+    +       '<div style="width:45px;height:1px;background:#777777;margin:18px auto;"></div>'
+    +       '<div style="font-size:11px;color:#aaaaaa;">' + contactEmail + ' &nbsp;|&nbsp; www.' + domain + '</div>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>';
+}
+
 function notifyApplicantOfApplication(job, submission){
   var email = "";
   var applicantName = "Applicant";
