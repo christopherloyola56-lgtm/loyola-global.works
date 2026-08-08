@@ -1038,8 +1038,8 @@ function renderApplyForm(job, container){
     }).then(function(){
       // Fire off an automatic email notification to the company inbox.
       notifyCompanyOfApplication(job, submission);
-      // Send the branded receipt to the applicant via FormSubmit autoresponse.
-      try { notifyApplicantOfApplication(job, submission); } catch(e) { console.error('Applicant receipt error:', e); }
+      // Send the confirmation receipt to the applicant via EmailJS.
+      notifyApplicantOfApplication(job, submission);
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
@@ -1082,46 +1082,72 @@ function renderApplyForm(job, container){
 }
 
 function sendFormSubmitReceipt(email, subject, htmlMessage, fields, templateData){
+  email = String(email || "").trim();
   if(!email){
-    console.warn("[LGW] Branded receipt skipped: no recipient email.");
-    return Promise.resolve(false);
-  }
-  if(!window.emailjs){
-    console.error("[LGW] Branded receipt skipped: the EmailJS SDK hasn't loaded (window.emailjs is undefined). Check that the emailjs CDN <script> tag is present and not blocked.");
+    console.warn("[LGW] Receipt skipped: no recipient email.");
     return Promise.resolve(false);
   }
 
-  var recipientName = (templateData && (templateData.applicant_name || templateData.name)) || "there";
+  if(!window.emailjs || typeof window.emailjs.send !== "function"){
+    console.error("[LGW] Receipt skipped: EmailJS SDK is not available.");
+    return Promise.resolve(false);
+  }
 
-  // Sent under several common EmailJS variable-name conventions at once,
-  // since which ones actually matter depends entirely on how the "To Email"
-  // and body fields are configured on the template in the EmailJS dashboard.
+  var data = templateData || {};
+  var recipientName = String(data.applicant_name || data.name || "there").trim();
+  var companyEmail = (DB && DB.settings && DB.settings.companyEmail)
+    ? String(DB.settings.companyEmail).trim()
+    : "";
+
+  // The EmailJS template should use {{to_email}} in its To Email field.
+  // Extra aliases are included so the same template remains compatible with
+  // the common variable names used in the existing LGW template.
   var params = Object.assign({
     to_email: email,
     to_name: recipientName,
+    recipient_email: email,
     user_email: email,
     email: email,
+    applicant_email: email,
     name: recipientName,
+    applicant_name: recipientName,
     subject: subject,
-    message_html: htmlMessage,
     message: htmlMessage,
-    recipient_email: email,
-    reply_to: (DB && DB.settings) ? DB.settings.companyEmail : ""
-  }, fields || {}, templateData || {});
+    message_html: htmlMessage,
+    html_message: htmlMessage,
+    reply_to: companyEmail,
+    from_name: "Loyola Global Works"
+  }, fields || {}, data || {});
 
-  console.info("[LGW] Sending branded receipt via EmailJS to:", email, params);
+  // Never allow optional form fields to overwrite the actual recipient.
+  params.to_email = email;
+  params.recipient_email = email;
+  params.user_email = email;
+  params.email = email;
+  params.applicant_email = email;
+  params.to_name = recipientName;
+  params.applicant_name = recipientName;
+  params.subject = subject;
+  params.message = htmlMessage;
+  params.message_html = htmlMessage;
+  params.html_message = htmlMessage;
+  params.reply_to = companyEmail;
 
-  return emailjs.send(
-    "service_fb52ptd",
-    "template_xl0cd2s",
-    params
-  ).then(function(response){
-    console.info("[LGW] Branded receipt sent to:", email, response.status, response.text);
-    return true;
-  }).catch(function(error){
-    console.error("[LGW] Branded receipt FAILED for", email, "—", error);
-    return false;
+  console.info("[LGW] Sending receipt via EmailJS", {
+    service: "service_fb52ptd",
+    template: "template_xl0cd2s",
+    recipient: email
   });
+
+  return emailjs.send("service_fb52ptd", "template_xl0cd2s", params)
+    .then(function(response){
+      console.info("[LGW] Receipt sent successfully to", email, response.status, response.text);
+      return true;
+    })
+    .catch(function(error){
+      console.error("[LGW] EmailJS receipt FAILED for", email, error);
+      return false;
+    });
 }
 
 
@@ -1307,8 +1333,8 @@ function renderConsultationForm(container){
       // Fire off an automatic email notification to the company inbox so
       // this lead can be followed up on and offers/services can be sent.
       notifyCompanyOfLead(lead);
-      // Send the branded receipt to the consultation lead via FormSubmit autoresponse.
-      try { notifyLeadOfReceipt(lead); } catch(e) { console.error('Lead receipt error:', e); }
+      // Send the confirmation receipt to the consultation lead via EmailJS.
+      notifyLeadOfReceipt(lead);
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
