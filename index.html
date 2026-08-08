@@ -1081,24 +1081,26 @@ function renderApplyForm(job, container){
 }
 
 function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
-  if(!email) return;
+  if(!email) return false;
 
-  var frameName = "lgw-receipt-" + Date.now() + "-" + Math.random().toString(36).slice(2,7);
-  var iframe = document.createElement("iframe");
-  iframe.name = frameName;
-  iframe.style.display = "none";
-  iframe.setAttribute("aria-hidden","true");
-  document.body.appendChild(iframe);
-
-  var form = document.createElement("form");
-  form.method = "POST";
+  /*
+   * FormSubmit requirement:
+   * - POST to the company's activated FormSubmit endpoint.
+   * - Put the visitor's address in `email`.
+   * - `_autoresponse` sends the confirmation back to that address.
+   * - autoresponse requires a normal POST (not AJAX) and reCAPTCHA enabled.
+   *
+   * We intentionally use a real form submission here instead of fetch().
+   * This is the important difference from the previous implementation.
+   */
   var receiptDestination =
     (typeof DB !== "undefined" && DB.settings && DB.settings.companyEmail)
       ? DB.settings.companyEmail
       : "christopherloyola56@gmail.com";
 
+  var form = document.createElement("form");
+  form.method = "POST";
   form.action = "https://formsubmit.co/" + encodeURIComponent(receiptDestination);
-  form.target = frameName;
   form.style.display = "none";
 
   function hidden(name, value){
@@ -1109,12 +1111,15 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
     form.appendChild(input);
   }
 
+  // Recipient of the autoresponse.
   hidden("email", email);
+
+  // Company notification.
   hidden("_subject", subject);
   hidden("_autoresponse", htmlMessage);
   hidden("_template", "box");
-  hidden("_captcha", "true");
   hidden("_replyto", email);
+  hidden("_captcha", "true");
   hidden("_honey", "");
   hidden("_url", window.location.href);
 
@@ -1122,18 +1127,25 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
     hidden(key, fields[key]);
   });
 
-  document.body.appendChild(form);
-  console.info("[LGW] Receipt submitted:", {
-    to: email,
-    formsubmitEndpoint: receiptDestination,
-    subject: subject
-  });
-  try { form.submit(); } catch(e) { console.error("Receipt submission failed:", e); }
+  // Return the visitor to the exact page after FormSubmit finishes.
+  // The application/lead has already been saved locally before this call.
+  hidden("_next", window.location.href);
 
-  setTimeout(function(){
+  document.body.appendChild(form);
+
+  console.info("[LGW] Sending company notification + visitor autoresponse", {
+    company: receiptDestination,
+    visitor: email
+  });
+
+  try {
+    form.submit();
+    return true;
+  } catch(e) {
+    console.error("[LGW] FormSubmit receipt failed:", e);
     if(form.parentNode) form.parentNode.removeChild(form);
-    if(iframe.parentNode) iframe.parentNode.removeChild(iframe);
-  }, 15000);
+    return false;
+  }
 }
 
 function notifyApplicantOfApplication(job, submission){
