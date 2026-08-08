@@ -1037,6 +1037,7 @@ function renderApplyForm(job, container){
     }).then(function(){
       // Fire off an automatic email notification to the company inbox.
       notifyCompanyOfApplication(job, submission);
+      notifyApplicantOfApplication(job, submission);
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
@@ -1076,6 +1077,150 @@ function renderApplyForm(job, container){
       body: JSON.stringify(payload)
     }).catch(function(){ /* Non-fatal: the application is already saved either way. */ });
   }
+}
+
+/*
+   APPLICANT / LEAD RECEIPTS
+   Uses FormSubmit's standard POST endpoint in a hidden iframe.
+   This is intentionally separate from the existing AJAX company notification:
+   FormSubmit documents that _autoresponse is not supported for AJAX submissions.
+*/
+function sendFormSubmitReceipt(email, subject, message, fields){
+  if(!email) return;
+
+  var frameName = "lgw-receipt-" + Date.now() + "-" + Math.random().toString(36).slice(2,7);
+  var iframe = document.createElement("iframe");
+  iframe.name = frameName;
+  iframe.style.display = "none";
+  iframe.setAttribute("aria-hidden","true");
+
+  var form = document.createElement("form");
+  form.method = "POST";
+  form.action = "https://formsubmit.co/" + encodeURIComponent(email);
+  form.target = frameName;
+  form.style.display = "none";
+
+  function hidden(name, value){
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value == null ? "" : String(value);
+    form.appendChild(input);
+  }
+
+  hidden("_subject", subject);
+  hidden("_autoresponse", message);
+  hidden("_template", "box");
+  hidden("_captcha", "true");
+  hidden("_replyto", email);
+  hidden("_honey", "");
+
+  Object.keys(fields || {}).forEach(function(key){
+    hidden(key, fields[key]);
+  });
+
+  document.body.appendChild(iframe);
+  document.body.appendChild(form);
+
+  try { form.submit(); } catch(e) {}
+
+  setTimeout(function(){
+    if(form.parentNode) form.parentNode.removeChild(form);
+    if(iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  }, 12000);
+}
+
+function applicantFirstName(name){
+  return (name || "there").trim().split(/\s+/)[0] || "there";
+}
+
+function notifyApplicantOfApplication(job, submission){
+  var email = "";
+  var applicantName = "Applicant";
+
+  job.fields.forEach(function(f){
+    var a = submission.answers[f.id];
+    var value = a ? a.value : "";
+    if(f.type === "email" || /email/i.test(f.label || "")){
+      if(!email) email = value;
+    }
+    if(/full name|name/i.test(f.label || "") && value){
+      applicantName = value;
+    }
+  });
+
+  if(!email) return;
+
+  var firstName = applicantFirstName(applicantName);
+  var message =
+    "LOYOLA GLOBAL WORKS\\n" +
+    "GLOBAL TALENT. REAL IMPACT.\\n\\n" +
+    "APPLICATION RECEIVED\\n" +
+    "────────────────────────────────\\n\\n" +
+    "Dear " + firstName + ",\\n\\n" +
+    "Thank you for submitting your application for the " + job.title + " position with Loyola Global Works.\\n\\n" +
+    "We have successfully received your information and our talent team will carefully review your application. " +
+    "If your experience and qualifications align with the opportunity, a member of our team will contact you regarding the next steps.\\n\\n" +
+    "There is no need to resubmit your application. Please keep this email for your records.\\n\\n" +
+    "Position: " + job.title + "\\n" +
+    "Department: " + (job.department || "Loyola Global Works") + "\\n" +
+    "Submitted: " + new Date(submission.submittedAt).toLocaleString() + "\\n\\n" +
+    "We appreciate your interest in Loyola Global Works and the time you invested in your application.\\n\\n" +
+    "Sincerely,\\n" +
+    "Loyola Global Works\\n" +
+    "Connecting Talent. Powering Business.\\n" +
+    (DB.settings.companyDomain || "loyolaglobalworks.com");
+
+  var fields = {
+    "Submission Type": "Job Application",
+    "Position": job.title,
+    "Applicant": applicantName
+  };
+
+  sendFormSubmitReceipt(
+    email,
+    "Application Received — " + job.title + " | Loyola Global Works",
+    message,
+    fields
+  );
+}
+
+function notifyLeadOfReceipt(lead){
+  var email = lead.email;
+  if(!email) return;
+
+  var firstName = applicantFirstName(lead.name);
+  var message =
+    "LOYOLA GLOBAL WORKS\\n" +
+    "GLOBAL TALENT. REAL IMPACT.\\n\\n" +
+    "CONSULTATION REQUEST RECEIVED\\n" +
+    "────────────────────────────────\\n\\n" +
+    "Dear " + firstName + ",\\n\\n" +
+    "Thank you for reaching out to Loyola Global Works. We have successfully received your consultation request and the information you provided.\\n\\n" +
+    "Our team will review your requirements and contact you shortly to discuss your needs and arrange the next step.\\n\\n" +
+    "Service of Interest: " + (lead.service || "General Inquiry") + "\\n" +
+    "Preferred Date: " + (lead.preferredDate || "To be arranged") + "\\n" +
+    "Preferred Time: " + (lead.preferredTime || "To be arranged") + "\\n" +
+    "Submitted: " + new Date(lead.submittedAt).toLocaleString() + "\\n\\n" +
+    "Please keep this email as confirmation that your request has been received. No further action is required at this time.\\n\\n" +
+    "We look forward to learning more about your business and exploring how Loyola Global Works can support your goals.\\n\\n" +
+    "Sincerely,\\n" +
+    "Loyola Global Works\\n" +
+    "Connecting Talent. Powering Business.\\n" +
+    (DB.settings.companyDomain || "loyolaglobalworks.com");
+
+  var fields = {
+    "Submission Type": "Consultation Request",
+    "Contact": lead.name || "",
+    "Company": lead.company || ""
+  };
+
+  sendFormSubmitReceipt(
+    email,
+    "Consultation Request Received | Loyola Global Works",
+    message,
+    fields
+  );
 }
 
 /* =========================================================
@@ -1187,6 +1332,7 @@ function renderConsultationForm(container){
       // Fire off an automatic email notification to the company inbox so
       // this lead can be followed up on and offers/services can be sent.
       notifyCompanyOfLead(lead);
+      notifyLeadOfReceipt(lead);
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
