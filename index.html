@@ -1038,8 +1038,9 @@ function renderApplyForm(job, container){
     }).then(function(){
       // Fire off an automatic email notification to the company inbox.
       notifyCompanyOfApplication(job, submission);
-      // Send the confirmation receipt to the applicant via EmailJS.
-      notifyApplicantOfApplication(job, submission);
+      // Send the acknowledgement to the applicant. Email delivery is
+      // intentionally non-blocking for the saved application.
+      try { notifyApplicantOfApplication(job, submission); } catch(e) { console.error('Applicant receipt error:', e); }
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
@@ -1082,74 +1083,88 @@ function renderApplyForm(job, container){
 }
 
 function sendFormSubmitReceipt(email, subject, htmlMessage, fields, templateData){
-  email = String(email || "").trim();
   if(!email){
-    console.warn("[LGW] Receipt skipped: no recipient email.");
+    console.warn("[LGW] Branded receipt skipped: no recipient email.");
     return Promise.resolve(false);
   }
 
-  if(!window.emailjs || typeof window.emailjs.send !== "function"){
-    console.error("[LGW] Receipt skipped: EmailJS SDK is not available.");
-    return Promise.resolve(false);
-  }
+  var recipientName = (templateData && (templateData.applicant_name || templateData.name)) || "there";
+  var companyEmail = (DB && DB.settings && DB.settings.companyEmail) ? DB.settings.companyEmail : "";
 
-  var data = templateData || {};
-  var recipientName = String(data.applicant_name || data.name || "there").trim();
-  var companyEmail = (DB && DB.settings && DB.settings.companyEmail)
-    ? String(DB.settings.companyEmail).trim()
-    : "";
-
-  // The EmailJS template should use {{to_email}} in its To Email field.
-  // Extra aliases are included so the same template remains compatible with
-  // the common variable names used in the existing LGW template.
+  // EmailJS is the primary receipt sender. IMPORTANT: in the EmailJS
+  // template, the "To Email" field must be set to {{to_email}}. If the
+  // template has a fixed recipient, the receipt will go to that address
+  // instead of the applicant.
   var params = Object.assign({
     to_email: email,
     to_name: recipientName,
-    recipient_email: email,
     user_email: email,
     email: email,
-    applicant_email: email,
     name: recipientName,
-    applicant_name: recipientName,
     subject: subject,
-    message: htmlMessage,
     message_html: htmlMessage,
-    html_message: htmlMessage,
-    reply_to: companyEmail,
-    from_name: "Loyola Global Works"
-  }, fields || {}, data || {});
+    message: htmlMessage,
+    recipient_email: email,
+    reply_to: companyEmail
+  }, fields || {}, templateData || {});
 
-  // Never allow optional form fields to overwrite the actual recipient.
-  params.to_email = email;
-  params.recipient_email = email;
-  params.user_email = email;
-  params.email = email;
-  params.applicant_email = email;
-  params.to_name = recipientName;
-  params.applicant_name = recipientName;
-  params.subject = subject;
-  params.message = htmlMessage;
-  params.message_html = htmlMessage;
-  params.html_message = htmlMessage;
-  params.reply_to = companyEmail;
-
-  console.info("[LGW] Sending receipt via EmailJS", {
-    service: "service_fb52ptd",
-    template: "template_xl0cd2s",
-    recipient: email
-  });
-
-  return emailjs.send("service_fb52ptd", "template_xl0cd2s", params)
-    .then(function(response){
-      console.info("[LGW] Receipt sent successfully to", email, response.status, response.text);
+  function sendEmailJS(){
+    if(!window.emailjs){
+      return Promise.reject(new Error("EmailJS SDK is not loaded."));
+    }
+    console.info("[LGW] Sending branded receipt via EmailJS to:", email);
+    return emailjs.send("service_fb52ptd", "template_xl0cd2s", params).then(function(response){
+      console.info("[LGW] Branded receipt sent via EmailJS to:", email, response.status, response.text);
       return true;
-    })
-    .catch(function(error){
-      console.error("[LGW] EmailJS receipt FAILED for", email, error);
+    });
+  }
+
+  // Fallback: FormSubmit sends an acknowledgement directly to the
+  // applicant's email address if EmailJS is unavailable or misconfigured.
+  // The company notification still uses the existing FormSubmit endpoint.
+  function sendFormSubmitFallback(){
+    var plainMessage = String(htmlMessage || "")
+      .replace(/<br\s*\/?>(\r?\n)?/gi, "\n")
+      .replace(/<\/(p|div|h[1-6])>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    var payload = Object.assign({
+      email: email,
+      _subject: subject,
+      _autoresponse: plainMessage,
+      _replyto: companyEmail,
+      _template: "table",
+      _captcha: "false"
+    }, fields || {}, templateData || {});
+
+    console.warn("[LGW] EmailJS receipt failed; trying FormSubmit fallback for:", email);
+    return fetch("https://formsubmit.co/ajax/" + encodeURIComponent(companyEmail), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function(response){
+      if(!response.ok) throw new Error("FormSubmit fallback HTTP " + response.status);
+      return response.json().catch(function(){ return {}; });
+    }).then(function(){
+      console.info("[LGW] FormSubmit receipt fallback submitted for:", email);
+      return true;
+    });
+  }
+
+  return sendEmailJS().catch(function(error){
+    console.error("[LGW] Branded receipt via EmailJS FAILED for", email, "—", error);
+    return sendFormSubmitFallback().catch(function(fallbackError){
+      console.error("[LGW] Receipt fallback FAILED for", email, "—", fallbackError);
       return false;
     });
+  });
 }
-
 
 function notifyApplicantOfApplication(job, submission){
   var email = "";
@@ -1333,8 +1348,9 @@ function renderConsultationForm(container){
       // Fire off an automatic email notification to the company inbox so
       // this lead can be followed up on and offers/services can be sent.
       notifyCompanyOfLead(lead);
-      // Send the confirmation receipt to the consultation lead via EmailJS.
-      notifyLeadOfReceipt(lead);
+      // Send the acknowledgement to the lead. Email delivery is
+      // intentionally non-blocking for the saved consultation request.
+      try { notifyLeadOfReceipt(lead); } catch(e) { console.error('Lead receipt error:', e); }
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
