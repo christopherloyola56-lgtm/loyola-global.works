@@ -1080,145 +1080,6 @@ function renderApplyForm(job, container){
   }
 }
 
-/*
-   APPLICANT / LEAD RECEIPTS
-   Uses FormSubmit's standard POST endpoint in a hidden iframe.
-   This is intentionally separate from the existing AJAX company notification:
-   FormSubmit documents that _autoresponse is not supported for AJAX submissions.
-*/
-function sendFormSubmitReceipt(email, subject, message, fields){
-  if(!email) return;
-
-  var frameName = "lgw-receipt-" + Date.now() + "-" + Math.random().toString(36).slice(2,7);
-  var iframe = document.createElement("iframe");
-  iframe.name = frameName;
-  iframe.style.display = "none";
-  iframe.setAttribute("aria-hidden","true");
-  document.body.appendChild(iframe);
-
-  var form = document.createElement("form");
-  form.method = "POST";
-  // IMPORTANT: submit to Loyola Global Works' activated FormSubmit endpoint.
-  // The applicant/lead's address stays in the `email` field, which is what
-  // FormSubmit uses for `_autoresponse`.
-  var receiptDestination =
-    (typeof DB !== "undefined" && DB.settings && DB.settings.companyEmail)
-      ? DB.settings.companyEmail
-      : "christopherloyola56@gmail.com";
-  form.action = "https://formsubmit.co/" + encodeURIComponent(receiptDestination);
-  form.target = frameName;
-  form.style.display = "none";
-
-  function hidden(name, value){
-    var input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value == null ? "" : String(value);
-    form.appendChild(input);
-  }
-
-  // Critical: FormSubmit needs the submitter's email in an `email` field.
-  hidden("email", email);
-  hidden("_subject", subject);
-  hidden("_autoresponse", message);
-  hidden("_template", "box");
-  hidden("_captcha", "true");
-  hidden("_replyto", email);
-  hidden("_honey", "");
-  hidden("_url", window.location.href);
-
-  Object.keys(fields || {}).forEach(function(key){
-    hidden(key, fields[key]);
-  });
-
-  document.body.appendChild(form);
-
-  try {
-    form.submit();
-  } catch(e) {
-    console.error("Receipt email submission failed:", e);
-  }
-
-  setTimeout(function(){
-    if(form.parentNode) form.parentNode.removeChild(form);
-    if(iframe.parentNode) iframe.parentNode.removeChild(iframe);
-  }, 15000);
-}
-
-function applicantFirstName(name){
-  return (name || "there").trim().split(/\s+/)[0] || "there";
-}
-
-function lgwEmailEscape(value){
-  return String(value == null ? "" : value)
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;")
-    .replace(/'/g,"&#39;");
-}
-
-function lgwBrandedEmail(type, data){
-  var isApplication = type === "application";
-  var firstName = lgwEmailEscape(applicantFirstName(data.name));
-  var title = isApplication
-    ? "Thank You for Your Application"
-    : "Thank You for Reaching Out";
-  var eyebrow = isApplication
-    ? "APPLICATION RECEIVED"
-    : "CONSULTATION REQUEST RECEIVED";
-  var intro = isApplication
-    ? "We’re pleased to confirm that your application has been successfully received by Loyola Global Works."
-    : "We’re pleased to confirm that your consultation request has been successfully received by Loyola Global Works.";
-  var body = isApplication
-    ? "Our talent team will carefully review the information you provided. If your experience and qualifications align with the opportunity, a member of our team will contact you regarding the next steps."
-    : "Our team will review your requirements and contact you shortly to discuss your needs and arrange the next step.";
-  var detailTitle = isApplication ? "APPLICATION DETAILS" : "REQUEST DETAILS";
-
-  var details = isApplication
-    ? '<tr><td style="padding:10px 0;border-bottom:1px solid #e7e7e7;font-family:Arial,sans-serif;font-size:13px;color:#777;">POSITION</td><td align="right" style="padding:10px 0;border-bottom:1px solid #e7e7e7;font-family:Arial,sans-serif;font-size:14px;color:#111;font-weight:600;">' + lgwEmailEscape(data.position) + '</td></tr>' +
-      '<tr><td style="padding:10px 0;font-family:Arial,sans-serif;font-size:13px;color:#777;">SUBMITTED</td><td align="right" style="padding:10px 0;font-family:Arial,sans-serif;font-size:14px;color:#111;">' + lgwEmailEscape(data.submitted) + '</td></tr>'
-    : '<tr><td style="padding:10px 0;border-bottom:1px solid #e7e7e7;font-family:Arial,sans-serif;font-size:13px;color:#777;">SERVICE</td><td align="right" style="padding:10px 0;border-bottom:1px solid #e7e7e7;font-family:Arial,sans-serif;font-size:14px;color:#111;font-weight:600;">' + lgwEmailEscape(data.service) + '</td></tr>' +
-      '<tr><td style="padding:10px 0;border-bottom:1px solid #e7e7e7;font-family:Arial,sans-serif;font-size:13px;color:#777;">PREFERRED DATE</td><td align="right" style="padding:10px 0;border-bottom:1px solid #e7e7e7;font-family:Arial,sans-serif;font-size:14px;color:#111;">' + lgwEmailEscape(data.date) + '</td></tr>' +
-      '<tr><td style="padding:10px 0;font-family:Arial,sans-serif;font-size:13px;color:#777;">PREFERRED TIME</td><td align="right" style="padding:10px 0;font-family:Arial,sans-serif;font-size:14px;color:#111;">' + lgwEmailEscape(data.time) + '</td></tr>';
-
-  return '<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
-    '<title>' + lgwEmailEscape(eyebrow) + ' | Loyola Global Works</title></head>' +
-    '<body style="margin:0;padding:0;background:#f4f4f2;color:#111;">' +
-    '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' + lgwEmailEscape(eyebrow) + ' — Loyola Global Works</div>' +
-    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f4f2;margin:0;padding:0;">' +
-    '<tr><td align="center" style="padding:36px 14px;">' +
-    '<table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:640px;background:#fff;">' +
-    '<tr><td align="center" style="background:#171717;padding:34px 30px 30px;">' +
-    '<img src="' + logo_data + '" alt="Loyola Global Works" width="260" style="display:block;width:260px;max-width:80%;height:auto;border:0;filter:invert(1);">' +
-    '</td></tr>' +
-    '<tr><td style="height:4px;background:#111;font-size:0;line-height:0;">&nbsp;</td></tr>' +
-    '<tr><td align="center" style="padding:46px 42px 12px;">' +
-    '<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:3px;color:#777;font-weight:600;">' + eyebrow + '</div>' +
-    '<h1 style="margin:18px 0 18px;font-family:Georgia,Times New Roman,serif;font-size:42px;line-height:1.12;font-weight:400;color:#1c1c1c;">' + title + '</h1>' +
-    '<div style="width:52px;height:1px;background:#222;margin:0 auto 28px;"></div>' +
-    '<p style="margin:0;font-family:Georgia,Times New Roman,serif;font-size:18px;line-height:1.7;color:#444;">Dear ' + firstName + ',</p>' +
-    '<p style="margin:18px 0 0;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#555;">' + intro + '</p>' +
-    '</td></tr>' +
-    '<tr><td style="padding:0 42px;">' +
-    '<p style="margin:0;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#555;text-align:center;">' + body + '</p>' +
-    '</td></tr>' +
-    '<tr><td style="padding:32px 42px 12px;">' +
-    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-top:1px solid #222;border-bottom:1px solid #ddd;">' +
-    '<tr><td style="padding:16px 0 6px;font-family:Arial,sans-serif;font-size:11px;letter-spacing:2px;color:#777;font-weight:700;">' + detailTitle + '</td></tr>' +
-    details +
-    '</table></td></tr>' +
-    '<tr><td align="center" style="padding:32px 42px 42px;">' +
-    '<a href="https://www.loyolaglobalworks.com" style="display:inline-block;background:#171717;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;letter-spacing:2px;font-weight:700;padding:15px 26px;">VISIT LOYOLA GLOBAL WORKS</a>' +
-    '</td></tr>' +
-    '<tr><td style="background:#171717;padding:30px 35px;text-align:center;">' +
-    '<div style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:3px;color:#fff;font-weight:600;">LOYOLA GLOBAL WORKS</div>' +
-    '<div style="margin-top:9px;font-family:Arial,sans-serif;font-size:10px;letter-spacing:2px;color:#bdbdbd;">CONNECTING TALENT. POWERING BUSINESS.</div>' +
-    '<div style="width:45px;height:1px;background:#777;margin:18px auto;"></div>' +
-    '<div style="font-family:Arial,sans-serif;font-size:11px;line-height:1.7;color:#aaa;">hello@loyolaglobalworks.com &nbsp;|&nbsp; www.loyolaglobalworks.com</div>' +
-    '</td></tr></table></td></tr></table></body></html>';
-}
-
 function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
   if(!email) return;
 
@@ -1231,7 +1092,12 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
 
   var form = document.createElement("form");
   form.method = "POST";
-  form.action = "https://formsubmit.co/" + encodeURIComponent(email);
+  var receiptDestination =
+    (typeof DB !== "undefined" && DB.settings && DB.settings.companyEmail)
+      ? DB.settings.companyEmail
+      : "christopherloyola56@gmail.com";
+
+  form.action = "https://formsubmit.co/" + encodeURIComponent(receiptDestination);
   form.target = frameName;
   form.style.display = "none";
 
@@ -1257,6 +1123,11 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
   });
 
   document.body.appendChild(form);
+  console.info("[LGW] Receipt submitted:", {
+    to: email,
+    formsubmitEndpoint: receiptDestination,
+    subject: subject
+  });
   try { form.submit(); } catch(e) { console.error("Receipt submission failed:", e); }
 
   setTimeout(function(){
