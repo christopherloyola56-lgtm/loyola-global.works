@@ -1082,26 +1082,44 @@ function renderApplyForm(job, container){
 }
 
 function sendFormSubmitReceipt(email, subject, htmlMessage, fields, templateData){
-  if(!email || !window.emailjs) return Promise.resolve(false);
+  if(!email){
+    console.warn("[LGW] Branded receipt skipped: no recipient email.");
+    return Promise.resolve(false);
+  }
+  if(!window.emailjs){
+    console.error("[LGW] Branded receipt skipped: the EmailJS SDK hasn't loaded (window.emailjs is undefined). Check that the emailjs CDN <script> tag is present and not blocked.");
+    return Promise.resolve(false);
+  }
 
+  var recipientName = (templateData && (templateData.applicant_name || templateData.name)) || "there";
+
+  // Sent under several common EmailJS variable-name conventions at once,
+  // since which ones actually matter depends entirely on how the "To Email"
+  // and body fields are configured on the template in the EmailJS dashboard.
   var params = Object.assign({
     to_email: email,
+    to_name: recipientName,
+    user_email: email,
     email: email,
+    name: recipientName,
     subject: subject,
     message_html: htmlMessage,
+    message: htmlMessage,
     recipient_email: email,
     reply_to: (DB && DB.settings) ? DB.settings.companyEmail : ""
   }, fields || {}, templateData || {});
+
+  console.info("[LGW] Sending branded receipt via EmailJS to:", email, params);
 
   return emailjs.send(
     "service_fb52ptd",
     "template_xl0cd2s",
     params
   ).then(function(response){
-    console.info("[LGW] Branded receipt sent to:", email, response.status);
+    console.info("[LGW] Branded receipt sent to:", email, response.status, response.text);
     return true;
   }).catch(function(error){
-    console.error("[LGW] Branded receipt failed:", error);
+    console.error("[LGW] Branded receipt FAILED for", email, "—", error);
     return false;
   });
 }
