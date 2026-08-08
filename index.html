@@ -1037,7 +1037,7 @@ function renderApplyForm(job, container){
     }).then(function(){
       // Fire off an automatic email notification to the company inbox.
       notifyCompanyOfApplication(job, submission);
-      notifyApplicantOfApplication(job, submission);
+      try { notifyApplicantOfApplication(job, submission); } catch(e) { console.error('Applicant receipt error:', e); }
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
@@ -1093,6 +1093,7 @@ function sendFormSubmitReceipt(email, subject, message, fields){
   iframe.name = frameName;
   iframe.style.display = "none";
   iframe.setAttribute("aria-hidden","true");
+  document.body.appendChild(iframe);
 
   var form = document.createElement("form");
   form.method = "POST";
@@ -1108,26 +1109,32 @@ function sendFormSubmitReceipt(email, subject, message, fields){
     form.appendChild(input);
   }
 
+  // Critical: FormSubmit needs the submitter's email in an `email` field.
+  hidden("email", email);
   hidden("_subject", subject);
   hidden("_autoresponse", message);
   hidden("_template", "box");
   hidden("_captcha", "true");
   hidden("_replyto", email);
   hidden("_honey", "");
+  hidden("_url", window.location.href);
 
   Object.keys(fields || {}).forEach(function(key){
     hidden(key, fields[key]);
   });
 
-  document.body.appendChild(iframe);
   document.body.appendChild(form);
 
-  try { form.submit(); } catch(e) {}
+  try {
+    form.submit();
+  } catch(e) {
+    console.error("Receipt email submission failed:", e);
+  }
 
   setTimeout(function(){
     if(form.parentNode) form.parentNode.removeChild(form);
     if(iframe.parentNode) iframe.parentNode.removeChild(iframe);
-  }, 12000);
+  }, 15000);
 }
 
 function applicantFirstName(name){
@@ -1141,8 +1148,8 @@ function notifyApplicantOfApplication(job, submission){
   job.fields.forEach(function(f){
     var a = submission.answers[f.id];
     var value = a ? a.value : "";
-    if(f.type === "email" || /email/i.test(f.label || "")){
-      if(!email) email = value;
+    if((f.type === "email" || /email/i.test(f.label || "")) && value){
+      if(!email) email = value.trim();
     }
     if(/full name|name/i.test(f.label || "") && value){
       applicantName = value;
@@ -1332,7 +1339,7 @@ function renderConsultationForm(container){
       // Fire off an automatic email notification to the company inbox so
       // this lead can be followed up on and offers/services can be sent.
       notifyCompanyOfLead(lead);
-      notifyLeadOfReceipt(lead);
+      try { notifyLeadOfReceipt(lead); } catch(e) { console.error('Lead receipt error:', e); }
 
       container.innerHTML = "";
       container.appendChild(el("div", {class:"success-box"}, [
