@@ -1081,71 +1081,82 @@ function renderApplyForm(job, container){
 }
 
 function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
-  if(!email) return false;
+  if(!email) return Promise.resolve(false);
 
-  /*
-   * FormSubmit requirement:
-   * - POST to the company's activated FormSubmit endpoint.
-   * - Put the visitor's address in `email`.
-   * - `_autoresponse` sends the confirmation back to that address.
-   * - autoresponse requires a normal POST (not AJAX) and reCAPTCHA enabled.
-   *
-   * We intentionally use a real form submission here instead of fetch().
-   * This is the important difference from the previous implementation.
-   */
-  var receiptDestination =
-    (typeof DB !== "undefined" && DB.settings && DB.settings.companyEmail)
-      ? DB.settings.companyEmail
-      : "christopherloyola56@gmail.com";
+  return new Promise(function(resolve){
+    var receiptDestination =
+      (typeof DB !== "undefined" && DB.settings && DB.settings.companyEmail)
+        ? DB.settings.companyEmail
+        : "christopherloyola56@gmail.com";
 
-  var form = document.createElement("form");
-  form.method = "POST";
-  form.action = "https://formsubmit.co/" + encodeURIComponent(receiptDestination);
-  form.style.display = "none";
+    /*
+      ONE regular FormSubmit POST does both jobs:
+      1) delivers the submission to Loyola Global Works
+      2) sends _autoresponse to the applicant/lead via the `email` field
 
-  function hidden(name, value){
-    var input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value == null ? "" : String(value);
-    form.appendChild(input);
-  }
+      IMPORTANT: this is intentionally NOT the /ajax/ endpoint because
+      FormSubmit documents that autoresponses do not work with AJAX.
+    */
+    var targetName = "lgwFormSubmit_" + Date.now();
+    var form = document.createElement("form");
+    form.method = "POST";
+    form.action = "https://formsubmit.co/" + encodeURIComponent(receiptDestination);
+    form.target = targetName;
+    form.style.display = "none";
+    form.acceptCharset = "UTF-8";
 
-  // Recipient of the autoresponse.
-  hidden("email", email);
+    function add(name, value){
+      var input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value == null ? "" : String(value);
+      form.appendChild(input);
+    }
 
-  // Company notification.
-  hidden("_subject", subject);
-  hidden("_autoresponse", htmlMessage);
-  hidden("_template", "box");
-  hidden("_replyto", email);
-  hidden("_captcha", "true");
-  hidden("_honey", "");
-  hidden("_url", window.location.href);
+    add("email", email);
+    add("_subject", subject);
+    add("_autoresponse", htmlMessage);
+    add("_template", "box");
+    add("_replyto", email);
+    add("_url", window.location.href);
+    add("_honey", "");
 
-  Object.keys(fields || {}).forEach(function(key){
-    hidden(key, fields[key]);
+    Object.keys(fields || {}).forEach(function(key){
+      add(key, fields[key]);
+    });
+
+    /*
+      Use a real browser target instead of a hidden iframe.
+      FormSubmit's autoresponse is a normal POST feature and can be
+      blocked when submitted through AJAX/hidden automation.
+    */
+    var popup = window.open("", targetName, "width=1,height=1,left=-10000,top=-10000");
+    var openedPopup = !!popup;
+
+    if(!openedPopup){
+      // If the browser blocks popups, submit in the current tab.
+      // The site remains usable because _next returns the visitor to home.
+      add("_next", window.location.href.split("#")[0] + "#/");
+      form.target = "_self";
+    }
+
+    document.body.appendChild(form);
+
+    try {
+      form.submit();
+      resolve(true);
+    } catch(e) {
+      console.error("[LGW] Receipt submission failed:", e);
+      resolve(false);
+    }
+
+    setTimeout(function(){
+      if(form.parentNode) form.parentNode.removeChild(form);
+      if(popup && !popup.closed) {
+        try { popup.close(); } catch(e){}
+      }
+    }, 8000);
   });
-
-  // Return the visitor to the exact page after FormSubmit finishes.
-  // The application/lead has already been saved locally before this call.
-  hidden("_next", window.location.href);
-
-  document.body.appendChild(form);
-
-  console.info("[LGW] Sending company notification + visitor autoresponse", {
-    company: receiptDestination,
-    visitor: email
-  });
-
-  try {
-    form.submit();
-    return true;
-  } catch(e) {
-    console.error("[LGW] FormSubmit receipt failed:", e);
-    if(form.parentNode) form.parentNode.removeChild(form);
-    return false;
-  }
 }
 
 function notifyApplicantOfApplication(job, submission){
