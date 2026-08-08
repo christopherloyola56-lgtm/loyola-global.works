@@ -1094,14 +1094,29 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
       1) delivers the submission to Loyola Global Works
       2) sends _autoresponse to the applicant/lead via the `email` field
 
-      IMPORTANT: this is intentionally NOT the /ajax/ endpoint because
-      FormSubmit documents that autoresponses do not work with AJAX.
+      This is intentionally NOT the /ajax/ endpoint, because FormSubmit
+      documents that autoresponses do not work with fetch/XHR-style AJAX
+      submissions — it has to be a genuine HTML form POST.
+
+      That genuine POST is targeted at a hidden <iframe> rather than a
+      popup window. A popup opened with window.open() only succeeds if the
+      browser still considers the call a direct result of the user's click;
+      by the time this runs, an async storage save has already happened in
+      between, so most browsers silently block the popup — no popup means
+      no submission, with no visible error. A hidden iframe target isn't
+      subject to that gesture timing or to popup blockers at all, and the
+      visible page never navigates away.
     */
-    var targetName = "lgwFormSubmit_" + Date.now();
+    var frameName = "lgwFormSubmitFrame_" + Date.now() + "_" + Math.floor(Math.random() * 1e6);
+    var iframe = document.createElement("iframe");
+    iframe.name = frameName;
+    iframe.style.display = "none";
+    document.body.appendChild(iframe);
+
     var form = document.createElement("form");
     form.method = "POST";
     form.action = "https://formsubmit.co/" + encodeURIComponent(receiptDestination);
-    form.target = targetName;
+    form.target = frameName;
     form.style.display = "none";
     form.acceptCharset = "UTF-8";
 
@@ -1125,21 +1140,6 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
       add(key, fields[key]);
     });
 
-    /*
-      Use a real browser target instead of a hidden iframe.
-      FormSubmit's autoresponse is a normal POST feature and can be
-      blocked when submitted through AJAX/hidden automation.
-    */
-    var popup = window.open("", targetName, "width=1,height=1,left=-10000,top=-10000");
-    var openedPopup = !!popup;
-
-    if(!openedPopup){
-      // If the browser blocks popups, submit in the current tab.
-      // The site remains usable because _next returns the visitor to home.
-      add("_next", window.location.href.split("#")[0] + "#/");
-      form.target = "_self";
-    }
-
     document.body.appendChild(form);
 
     try {
@@ -1152,9 +1152,7 @@ function sendFormSubmitReceipt(email, subject, htmlMessage, fields){
 
     setTimeout(function(){
       if(form.parentNode) form.parentNode.removeChild(form);
-      if(popup && !popup.closed) {
-        try { popup.close(); } catch(e){}
-      }
+      if(iframe.parentNode) iframe.parentNode.removeChild(iframe);
     }, 8000);
   });
 }
